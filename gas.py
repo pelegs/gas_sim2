@@ -124,6 +124,12 @@ class Particle:
         if 0 <= ta <= 1 and 0 <= tb <= 1:
             self.vel = self.vel - 2 * (np.dot(self.vel, w.normal)) * w.normal
 
+    def in_bounds(self, xmin, ymin, xmax, ymax):
+        if xmin < self.pos[0] < xmax and ymin < self.pos[1] < ymax:
+            return True
+        else:
+            return False
+
 
 class Grid:
     def __init__(self,
@@ -193,16 +199,16 @@ balls1 = [Particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
                    mass=1,
                    radius=5,
                    color=[0,255,0])
-         for _ in range(10)]
+         for _ in range(100)]
 balls2 = [Particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
-                   vel=np.random.uniform(-10, 10, size=2),
-                   mass=10,
-                   radius=10,
+                   vel=np.random.uniform(-1, 1, size=2),
+                   mass=1000,
+                   radius=25,
                    color=[255,0,100])
-         for _ in range(20)]
+         for _ in range(1)]
 balls = balls1 + balls2
 
-grid = Grid(10, 10,
+grid = Grid(30, 30,
             0.0, 0.0,
             800.0, 800.0)
 
@@ -237,6 +243,9 @@ while True:
     # Move
     for b in balls:
         b.move(dt)
+        if not b.in_bounds(0, 0, 800, 800):
+            print('deleted object')
+            balls.remove(b)
 
     # Drawing
     screen.fill(3*[0])
