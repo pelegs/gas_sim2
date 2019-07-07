@@ -41,7 +41,7 @@ def dist(v1, v2):
     return np.linalg.norm(v2-v1)
 
 
-class wall:
+class Wall:
     def __init__(self, start, end, width=1, color=[255]*3):
         self.start = start
         self.end = end
@@ -76,13 +76,33 @@ class wall:
 
 
 
-class particle:
+class Particle:
     def __init__(self, pos, vel, mass, radius, color):
         self.pos = pos
         self.vel = vel
         self.mass = mass
         self.radius = radius
         self.color = color
+
+        self.cell = (-1, -1)
+        self.neighbors = []
+
+    def set_cell(self, x, y):
+        self.cell = (x, y)
+
+    def set_neighors(self, grid):
+        # Reset current neighbors list
+        self.neighbors = []
+
+        # Create new list
+        x, y = self.cell
+        Nx, Ny = grid.Nx, grid.Ny
+        neighbors = [grid.objects[i][j] for i in range(x-1, x+2) if 0 <= i < Nx
+                                        for j in range(y-1, y+2) if 0 <= j < Ny]
+        self.neighbors = [object for sublist in neighbors
+                                 for object in sublist
+                                 if object is not self]
+
 
     def add_acceleration(self, a, dt):
         self.vel += a*dt
@@ -105,6 +125,29 @@ class particle:
             self.vel = self.vel - 2 * (np.dot(self.vel, w.normal)) * w.normal
 
 
+class Grid:
+    def __init__(self,
+                 Nx, Ny,
+                 Sx, Sy,
+                 Ex, Ey):
+        self.Nx = Nx
+        self.Ny = Ny
+        self.Lx = (Ex-Sx)/Nx
+        self.Ly = (Ey-Sy)/Ny
+
+        self.reset()
+
+    def reset(self):
+        self.objects = [[[] for _ in range(self.Nx)]
+                            for _ in range(self.Ny)]
+
+    def add_object(self, p):
+        cellx = int(np.floor(p.pos[0]/self.Lx))
+        celly = int(np.floor(p.pos[1]/self.Ly))
+        self.objects[cellx][celly].append(p)
+        p.set_cell(cellx, celly)
+
+
 def particle_collision(p1, p2):
     distance = dist(p1.pos, p2.pos)
     if distance <= p1.radius + p2.radius:
@@ -125,39 +168,43 @@ pygame.display.init()
 screen = pygame.display.set_mode((s, s))
 pygame.display.flip()
 
-dt = 0.1
+dt = 0.5
 gravity = np.array([0, 2])
 
-w1 = wall(start=np.array([s/2-200, s/2-200]),
+w1 = Wall(start=np.array([s/2-200, s/2-200]),
           end=np.array([s/2+200, s/2-200]),
           width=4,
           color=[255,0,255])
-w2 = wall(start=np.array([s/2-200, s/2-200]),
+w2 = Wall(start=np.array([s/2-200, s/2-200]),
           end=np.array([s/2-200, s/2+200]),
           width=4,
           color=[255,0,255])
-w3 = wall(start=np.array([s/2+200, s/2+200]),
+w3 = Wall(start=np.array([s/2+200, s/2+200]),
           end=np.array([s/2-200, s/2+200]),
           width=4,
           color=[255,0,255])
-w4 = wall(start=np.array([s/2+200, s/2+200]),
+w4 = Wall(start=np.array([s/2+200, s/2+200]),
           end=np.array([s/2+200, s/2-200]),
           width=4,
           color=[255,0,255])
 
-balls1 = [particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
+balls1 = [Particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
                    vel=np.random.uniform(-10, 10, size=2),
                    mass=1,
                    radius=5,
                    color=[0,255,0])
          for _ in range(10)]
-balls2 = [particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
+balls2 = [Particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
                    vel=np.random.uniform(-10, 10, size=2),
                    mass=10,
                    radius=10,
                    color=[255,0,100])
          for _ in range(20)]
 balls = balls1 + balls2
+
+grid = Grid(10, 10,
+            0.0, 0.0,
+            800.0, 800.0)
 
 while True:
     for event in pygame.event.get():
@@ -169,17 +216,27 @@ while True:
                 pygame.quit()
                 sys.exit()
 
+    # Place in grid
+    grid.reset()
+    for b in balls:
+        grid.add_object(b)
+
+    # Create neighbor lists
+    for b in balls:
+        b.set_neighors(grid)
+
     # Physics
     for b1 in balls:
-        b1.add_acceleration(gravity, dt)
-        b1.move(dt)
         b1.wall_collision(w1, dt)
         b1.wall_collision(w2, dt)
         b1.wall_collision(w3, dt)
         b1.wall_collision(w4, dt)
-        for b2 in balls:
-            if b1 is not b2:
-                particle_collision(b1, b2)
+        for b2 in b1.neighbors:
+            particle_collision(b1, b2)
+
+    # Move
+    for b in balls:
+        b.move(dt)
 
     # Drawing
     screen.fill(3*[0])
