@@ -109,8 +109,17 @@ class Particle:
     def add_acceleration(self, a, dt):
         self.vel += a*dt
 
+    def drag(self, k):
+        self.vel -= self.vel*k
+
     def move(self, dt):
         self.pos += self.vel * dt
+
+    def get_kinetic_energy(self):
+        return 0.5*self.mass*self.vel**2
+
+    def set_kinetic_energy(self, energy):
+        self.vel = scale_vec(self.vel, np.sqrt(2*energy/self.mass))
 
     def draw(self, surface):
         pygame.draw.circle(surface, self.color,
@@ -125,6 +134,9 @@ class Particle:
                                                   w.start[1], w.end[1])
         if 0 <= ta <= 1 and 0 <= tb <= 1:
             self.vel = self.vel - 2 * (np.dot(self.vel, w.normal)) * w.normal
+            return True
+        else:
+            return False
 
     def in_bounds(self, xmin, ymin, xmax, ymax):
         if xmin < self.pos[0] < xmax and ymin < self.pos[1] < ymax:
@@ -178,23 +190,30 @@ def particle_collision(p1, p2):
         p2.vel -= 2*p1.mass/M * dR
 
 
+def vel_cm(objects):
+    velx = np.sum([object.vel[0] for object in objects])
+    vely = np.sum([object.vel[1] for object in objects])
+    return np.array([velx, vely])
+
+
+
 s = 800
 center = np.array([s/2, s/2])
 pygame.display.init()
 screen = pygame.display.set_mode((s, s))
 pygame.display.flip()
 
-dt = 1
-gravity = np.array([0, 2])
+dt = 1.0
+gravity = np.array([0, 0.1])
 
 w1 = Wall(start=np.array([0, 0]),
           end=np.array([0, s]),
           width=4,
-          color=[255,0,255])
+          color=[255,255,255])
 w2 = Wall(start=np.array([0, 0]),
           end=np.array([s, 0]),
           width=4,
-          color=[255,0,255])
+          color=[255,255,255])
 w3 = Wall(start=np.array([s, s]),
           end=np.array([0, s]),
           width=4,
@@ -202,22 +221,32 @@ w3 = Wall(start=np.array([s, s]),
 w4 = Wall(start=np.array([s, s]),
           end=np.array([s, 0]),
           width=4,
-          color=[255,0,255])
+          color=[255,255,255])
 
-balls = [Particle(pos=np.random.uniform(0, s, 2),
-                  vel=np.random.uniform(-10, 10, 2),
+num_particles = 100
+balls = [Particle(pos=np.random.uniform(100, 500, 2),
+                  vel=np.zeros(2),
                   mass=1,
                   radius=10,
-                  color=np.random.randint(0,255,3))
-         for _ in range(100)]
+                  color=[255, 0, 0])
+         for _ in range(num_particles)]
+balls[-1].pos = np.array([700.0, 700.0])
+balls[-1].vel = np.array([-1.0, -1.0])
+balls[-1].mass = 1
+balls[-1].set_kinetic_energy(50)
+balls[-1].color = [255]*3
+#Ek = np.sum([b.get_kinetic_energy() for b in balls])
+#for b in balls:
+#    b.set_kinetic_energy(0/num_particles)
+#Ek = []
 
 grid = Grid(50, 50,
             0.0, 0.0,
             800.0, 800.0)
 
 # Data to collect
-bpos = np.empty(2)
-all_vels = np.empty(shape=(2, 100))
+#bpos = np.empty(2)
+#all_vels = np.empty(shape=(2, num_particles))
 
 # Main loop
 run = True
@@ -240,25 +269,28 @@ while run:
 
     # Physics
     for b1 in balls:
-        b1.wall_collision(w1, dt)
-        b1.wall_collision(w2, dt)
-        b1.wall_collision(w3, dt)
-        b1.wall_collision(w4, dt)
+        bath1 = b1.wall_collision(w1, dt)
+        bath2 = b1.wall_collision(w2, dt)
+        bath3 = b1.wall_collision(w3, dt)
+        bath4 = b1.wall_collision(w4, dt)
+        if bath3:
+            b1.set_kinetic_energy(10)
         for b2 in b1.neighbors:
             particle_collision(b1, b2)
+        #b1.drag(0.01)
         #b1.add_acceleration(gravity, dt)
 
     # Move
     for b in balls:
         b.move(dt)
         if not b.in_bounds(0, 0, 800, 800):
-            print('deleted object')
+            #print('deleted object')
             balls.remove(b)
 
     # Velocities (for coloring)
-    vels = np.array([np.linalg.norm(b.vel) for b in balls])
-    max = np.max(vels)
-    all_vels = np.append(all_vels, vels)
+    #vels = np.array([np.linalg.norm(b.vel) for b in balls])
+    #max = np.max(vels)
+    #all_vels = np.append(all_vels, vels)
 
     # Drawing
     screen.fill(3*[0])
@@ -267,15 +299,16 @@ while run:
     w3.draw(screen)
     w4.draw(screen)
     for b in balls:
-        b.set_color_by_vel(max, channel=RED)
+        #b.set_color_by_vel(max, channel=RED)
         b.draw(screen)
     pygame.display.update()
 
-    # Collect data on big ball
-    #bpos = np.vstack((bpos, balls[-1].pos))
+    # Collect data
+    #Ek.append(np.sum([b.get_kinetic_energy() for b in balls]))
 
 # Save collected data
-np.save('vels', all_vels)
+#np.save('vels', all_vels)
+#np.save('kinteic_energy', np.array(Ek))
 
 # Exit program
 pygame.quit()
