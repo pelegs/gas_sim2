@@ -7,6 +7,8 @@ from numpy import pi, sin, cos, sqrt
 import pygame
 
 
+RED, GREEN, BLUE = 0, 1, 2
+
 def normalize(vec):
     L = np.linalg.norm(vec)
     if L != 0:
@@ -130,6 +132,11 @@ class Particle:
         else:
             return False
 
+    def set_color_by_vel(self, max, channel=RED):
+        self.color = [0, 0, 0]
+        val = int((np.linalg.norm(self.vel)/max) * 255)
+        self.color[channel] = val
+
 
 class Grid:
     def __init__(self,
@@ -140,6 +147,8 @@ class Grid:
         self.Ny = Ny
         self.Lx = (Ex-Sx)/Nx
         self.Ly = (Ey-Sy)/Ny
+
+        self.density = np.zeros(shape=(Nx, Ny))
 
         self.reset()
 
@@ -152,6 +161,7 @@ class Grid:
         celly = int(np.floor(p.pos[1]/self.Ly))
         self.objects[cellx][celly].append(p)
         p.set_cell(cellx, celly)
+        self.density[cellx, celly] += 1
 
 
 def particle_collision(p1, p2):
@@ -174,53 +184,50 @@ pygame.display.init()
 screen = pygame.display.set_mode((s, s))
 pygame.display.flip()
 
-dt = 0.5
+dt = 1
 gravity = np.array([0, 2])
 
-w1 = Wall(start=np.array([s/2-200, s/2-200]),
-          end=np.array([s/2+200, s/2-200]),
+w1 = Wall(start=np.array([0, 0]),
+          end=np.array([0, s]),
           width=4,
           color=[255,0,255])
-w2 = Wall(start=np.array([s/2-200, s/2-200]),
-          end=np.array([s/2-200, s/2+200]),
+w2 = Wall(start=np.array([0, 0]),
+          end=np.array([s, 0]),
           width=4,
           color=[255,0,255])
-w3 = Wall(start=np.array([s/2+200, s/2+200]),
-          end=np.array([s/2-200, s/2+200]),
+w3 = Wall(start=np.array([s, s]),
+          end=np.array([0, s]),
           width=4,
           color=[255,0,255])
-w4 = Wall(start=np.array([s/2+200, s/2+200]),
-          end=np.array([s/2+200, s/2-200]),
+w4 = Wall(start=np.array([s, s]),
+          end=np.array([s, 0]),
           width=4,
           color=[255,0,255])
 
-balls1 = [Particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
-                   vel=np.random.uniform(-10, 10, size=2),
-                   mass=1,
-                   radius=5,
-                   color=[0,255,0])
+balls = [Particle(pos=np.random.uniform(0, s, 2),
+                  vel=np.random.uniform(-10, 10, 2),
+                  mass=1,
+                  radius=10,
+                  color=np.random.randint(0,255,3))
          for _ in range(100)]
-balls2 = [Particle(pos=np.random.uniform(s/2-100, s/2+100, 2),
-                   vel=np.random.uniform(-1, 1, size=2),
-                   mass=1000,
-                   radius=25,
-                   color=[255,0,100])
-         for _ in range(1)]
-balls = balls1 + balls2
 
-grid = Grid(30, 30,
+grid = Grid(50, 50,
             0.0, 0.0,
             800.0, 800.0)
 
-while True:
+# Data to collect
+bpos = np.empty(2)
+all_vels = np.empty(shape=(2, 100))
+
+# Main loop
+run = True
+while run:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+            run = False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_q:
-                pygame.quit()
-                sys.exit()
+                run = False
 
     # Place in grid
     grid.reset()
@@ -239,6 +246,7 @@ while True:
         b1.wall_collision(w4, dt)
         for b2 in b1.neighbors:
             particle_collision(b1, b2)
+        #b1.add_acceleration(gravity, dt)
 
     # Move
     for b in balls:
@@ -247,6 +255,11 @@ while True:
             print('deleted object')
             balls.remove(b)
 
+    # Velocities (for coloring)
+    vels = np.array([np.linalg.norm(b.vel) for b in balls])
+    max = np.max(vels)
+    all_vels = np.append(all_vels, vels)
+
     # Drawing
     screen.fill(3*[0])
     w1.draw(screen)
@@ -254,7 +267,16 @@ while True:
     w3.draw(screen)
     w4.draw(screen)
     for b in balls:
+        b.set_color_by_vel(max, channel=RED)
         b.draw(screen)
     pygame.display.update()
 
-print('')
+    # Collect data on big ball
+    #bpos = np.vstack((bpos, balls[-1].pos))
+
+# Save collected data
+np.save('vels', all_vels)
+
+# Exit program
+pygame.quit()
+sys.exit()
