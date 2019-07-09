@@ -79,11 +79,18 @@ class Wall:
 
 
 class Particle:
-    def __init__(self, pos, vel, mass, radius, color):
+    def __init__(self, pos, vel,
+                 mass, radius,
+                 LJ=False, Gravity=False,
+                 stickiness=0.0,
+                 color=[255, 255, 255]):
         self.pos = pos
         self.vel = vel
         self.mass = mass
         self.radius = radius
+        self.LJ = LJ
+        self.Gravity = Gravity
+        self.stickiness = stickiness
         self.color = color
 
         self.cell = (-1, -1)
@@ -120,6 +127,12 @@ class Particle:
 
     def set_kinetic_energy(self, energy):
         self.vel = scale_vec(self.vel, np.sqrt(2*energy/self.mass))
+
+    def LJForce(self, r):
+        return 12 * self.LJ / r**13 * self.radius**6 * (r**6 - self.radius**6)
+
+    def gravity(self, r):
+        return self.Gravity * self.mass / r**2
 
     def draw(self, surface):
         pygame.draw.circle(surface, self.color,
@@ -176,7 +189,7 @@ class Grid:
         self.density[cellx, celly] += 1
 
 
-def particle_collision(p1, p2):
+def particle_interaction(p1, p2, dt):
     distance = dist(p1.pos, p2.pos)
     if distance <= p1.radius + p2.radius:
         dr = p2.pos - p1.pos
@@ -186,8 +199,28 @@ def particle_collision(p1, p2):
         overlap = p1.radius + p2.radius - distance
         if overlap > 0.0:
             p2.pos += normalize(dr) * overlap
-        p1.vel += 2*p2.mass/M * dR
-        p2.vel -= 2*p1.mass/M * dR
+        p1.vel += (2*p2.mass/M * dR)
+        p1.vel *= p1.stickiness
+        p2.vel -= (2*p1.mass/M * dR)
+        p2.vel *= p2.stickiness
+    else:
+        dx12 = p1.pos - p2.pos
+        force = np.zeros(2)
+        if p1.LJ:
+            force += p1.LJForce(distance)
+        if p1.Gravity:
+            force += p1.gravity(distance)
+        acc = scale_vec(dx12, force/p2.mass)
+        p2.add_acceleration(acc, dt)
+
+        dx21 = -dx12
+        force = np.zeros(2)
+        if p2.LJ:
+            force += p2.LJForce(distance)
+        if p2.Gravity:
+            force += p2.gravity(distance)
+        acc = scale_vec(dx21, force/p1.mass)
+        p1.add_acceleration(acc, dt)
 
 
 def vel_cm(objects):
@@ -217,27 +250,25 @@ w2 = Wall(start=np.array([0, 0]),
 w3 = Wall(start=np.array([s, s]),
           end=np.array([0, s]),
           width=4,
-          color=[255,0,255])
+          color=[0,100,255])
 w4 = Wall(start=np.array([s, s]),
           end=np.array([s, 0]),
           width=4,
           color=[255,255,255])
 
-num_particles = 100
-balls = [Particle(pos=np.random.uniform(100, 500, 2),
-                  vel=np.zeros(2),
+num_particles = 300
+balls = [Particle(pos=np.random.uniform(50, 750, 2),
+                  vel=np.random.uniform(-1, 1, 2),
                   mass=1,
                   radius=10,
+                  LJ=False,
+                  Gravity=False,
+                  stickiness=0.95,
                   color=[255, 0, 0])
          for _ in range(num_particles)]
-balls[-1].pos = np.array([700.0, 700.0])
-balls[-1].vel = np.array([-1.0, -1.0])
-balls[-1].mass = 1
-balls[-1].set_kinetic_energy(50)
-balls[-1].color = [255]*3
-#Ek = np.sum([b.get_kinetic_energy() for b in balls])
-#for b in balls:
-#    b.set_kinetic_energy(0/num_particles)
+Ek = np.sum([b.get_kinetic_energy() for b in balls])
+for b in balls:
+    b.set_kinetic_energy(1E4/num_particles)
 #Ek = []
 
 grid = Grid(50, 50,
@@ -273,10 +304,10 @@ while run:
         bath2 = b1.wall_collision(w2, dt)
         bath3 = b1.wall_collision(w3, dt)
         bath4 = b1.wall_collision(w4, dt)
-        if bath3:
-            b1.set_kinetic_energy(10)
+        #if bath3:
+        #    b1.set_kinetic_energy(0.1)
         for b2 in b1.neighbors:
-            particle_collision(b1, b2)
+            particle_interaction(b1, b2, dt)
         #b1.drag(0.01)
         #b1.add_acceleration(gravity, dt)
 
