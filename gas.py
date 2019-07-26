@@ -5,6 +5,7 @@ import sys
 import numpy as np
 from numpy import pi, sin, cos, sqrt
 import pygame
+from colorsys import hsv_to_rgb as h2r
 
 
 RED, GREEN, BLUE = 0, 1, 2
@@ -86,6 +87,7 @@ class Particle:
                  color=[255, 255, 255]):
         self.pos = pos
         self.vel = vel
+        self.speed = np.linalg.norm(self.vel)
         self.mass = mass
         self.radius = radius
         self.LJ = LJ
@@ -121,6 +123,7 @@ class Particle:
 
     def move(self, dt):
         self.pos += self.vel * dt
+        self.speed = np.linalg.norm(self.vel)
 
     def get_kinetic_energy(self):
         return 0.5*self.mass*self.vel**2
@@ -157,10 +160,9 @@ class Particle:
         else:
             return False
 
-    def set_color_by_vel(self, max, channel=RED):
-        self.color = [0, 0, 0]
-        val = int((np.linalg.norm(self.vel)/max) * 255)
-        self.color[channel] = val
+    def set_color_by_vel(self, min, max):
+        h = (np.linalg.norm(self.vel) - min) / max
+        self.color = (np.array(h2r(1-h, 1.0, 1.0)) * 255).astype(int)
 
 
 class Grid:
@@ -187,6 +189,21 @@ class Grid:
         self.objects[cellx][celly].append(p)
         p.set_cell(cellx, celly)
         self.density[cellx, celly] += 1
+
+    def draw_rects(self, surface):
+        h = np.array([[len(obj) for obj in raw]
+                                for raw in self.objects])
+        min_h = h[h >= 0].min()
+        max_h = h[h >= 0].max()
+
+        h = h - np.ones(h.shape) * min_h
+        h = h / max_h
+
+        for i in range(self.Nx):
+            for j in range(self.Ny):
+                color = (np.array(h2r(1-h[i,j], 1.0, 1.0)) * 255).astype(int)
+                points = (i*self.Lx, j*self.Ly, (i+1)*self.Lx, (j+1)*self.Ly)
+                pygame.draw.rect(surface, color, points)
 
 
 def particle_interaction(p1, p2, dt):
@@ -263,7 +280,7 @@ balls = [Particle(pos=np.random.uniform(50, 750, 2),
                   radius=10,
                   LJ=False,
                   Gravity=False,
-                  stickiness=0.95,
+                  stickiness=1.0,
                   color=[255, 0, 0])
          for _ in range(num_particles)]
 Ek = np.sum([b.get_kinetic_energy() for b in balls])
@@ -309,7 +326,7 @@ while run:
         for b2 in b1.neighbors:
             particle_interaction(b1, b2, dt)
         #b1.drag(0.01)
-        #b1.add_acceleration(gravity, dt)
+        b1.add_acceleration(gravity, dt)
 
     # Move
     for b in balls:
@@ -319,18 +336,19 @@ while run:
             balls.remove(b)
 
     # Velocities (for coloring)
-    #vels = np.array([np.linalg.norm(b.vel) for b in balls])
-    #max = np.max(vels)
-    #all_vels = np.append(all_vels, vels)
+    vels = np.array([b.speed for b in balls])
+    min_vel = np.min(vels)
+    max_vel = np.max(vels)
 
     # Drawing
     screen.fill(3*[0])
+    #grid.draw_rects(screen)
     w1.draw(screen)
     w2.draw(screen)
     w3.draw(screen)
     w4.draw(screen)
     for b in balls:
-        #b.set_color_by_vel(max, channel=RED)
+        b.set_color_by_vel(min_vel, max_vel)
         b.draw(screen)
     pygame.display.update()
 
