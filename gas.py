@@ -273,7 +273,7 @@ w4 = Wall(start=np.array([s, s]),
           width=4,
           color=[255,255,255])
 
-num_particles = 300
+num_particles = 150
 balls = [Particle(pos=np.random.uniform(50, 750, 2),
                   vel=np.random.uniform(-1, 1, 2),
                   mass=1,
